@@ -1,0 +1,4 @@
+#!/bin/bash
+
+echo "我是server shell,我已经接收到了client传来的消息:$1"
+
