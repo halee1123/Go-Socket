@@ -99,6 +99,7 @@ func ReadServeriniFile(Text string) string {
 // server 开启程序
 func serverconn(){
 
+    // 获取ini文件数据参数
     ipaddress := ReadServeriniFile("socket.ipaddress")
     port := ReadServeriniFile("socket.port")
     ipAndPort := ipaddress + ":" + port

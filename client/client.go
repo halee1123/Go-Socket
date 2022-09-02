@@ -61,7 +61,8 @@ func sender(conn net.Conn) {
 
 // 连接server
 func connect() {
-    // 获取ini文件数据
+
+    // 获取ini文件数据参数
     ipaddress := ReadClieniniFile("socket.ipaddress")
     port := ReadClieniniFile("socket.port")
     ipAndPort := ipaddress + ":" + port
