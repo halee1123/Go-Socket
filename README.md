@@ -45,7 +45,7 @@ port = 8000 (与Server端的端口一致)
 
 ### 执行 Server端:
 
-#### ./server
+#### go run server
 
 #### server执行 client传来的shell命令
 
@@ -55,7 +55,7 @@ port = 8000 (与Server端的端口一致)
 
 ### 执行 Client端: 以命令形式传参执行
 
-#### ./client 这里传你的参数
+#### go run client 这里传你的参数
 
 
 #
