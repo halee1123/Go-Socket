@@ -71,15 +71,21 @@ go run server.go
 #
 
 #### client.go
+
 go run client.go hello,我是client
+
 Server连接成功...
+
 向server发送数据成功...
+
 
 #
 
 ### server端接收到的client消息
-#### Client传过来的消息: 我是server shell 脚本,我已经接收到了client传来的消息:hello,我是client
-#### 2022/09/02 14:52:27 127.0.0.1:57493  数据已处理,退出:  EOF
+
+Client传过来的消息: 我是server shell 脚本,我已经接收到了client传来的消息:hello,我是client
+
+2022/09/02 14:52:27 127.0.0.1:57493  数据已处理,退出:  EOF
 
 #
 
