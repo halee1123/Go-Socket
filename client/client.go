@@ -51,6 +51,7 @@ func sender(conn net.Conn) {
         strText = append(strText, fmt.Sprintf("%v", v))
     }
 
+    // 发送数据
     _, err := conn.Write([]byte(fmt.Sprintf(strText[1])))
     if err != nil {
         return
@@ -90,6 +91,7 @@ func connect() {
         }
 
         fmt.Println("Server连接成功...")
+
         // 执行数据发送
         sender(conn)
     }

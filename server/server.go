@@ -17,9 +17,8 @@ func init() {
     // 在当前路径下创建cLIent.ini文件
     var filePath = str + "/Server.ini"
 
+    // ini文件路径
     _, err := os.Stat(filePath)
-
-
 
     if err == nil {
         return
