@@ -45,19 +45,35 @@ func ReadClieniniFile(Text string) string {
 
 // 向server发送数据
 func sender(conn net.Conn) {
+
     var strText []string
+
     for _, v := range os.Args {
         //fmt.Println( v)
         strText = append(strText, fmt.Sprintf("%v", v))
     }
+
 
     // 发送数据
     _, err := conn.Write([]byte(fmt.Sprintf(strText[1])))
     if err != nil {
         return
     }
-    fmt.Println("向server发送数据成功...")
+
+    // 接收服务端返回的数据
+    buf := [10240]byte{}
+    serverMsg, err := conn.Read(buf[:]) // 服务端返回的信息
+    if err != nil {
+       fmt.Println("recv failed err:", err)
+       return
+    }
+
+    // 打印Server端返回的数据
+    fmt.Printf("Server端返回的数据:%s \n", string(buf[:serverMsg]))
+
+    fmt.Println("执行完毕,client程序退出...")
     os.Exit(0)
+
 }
 
 // 连接server
@@ -90,7 +106,7 @@ func connect() {
             os.Exit(1)
         }
 
-        fmt.Println("Server连接成功...")
+        //fmt.Println("Server连接成功...")
 
         // 执行数据发送
         sender(conn)
@@ -101,5 +117,4 @@ func connect() {
 func main() {
     // 执行连接程序
       connect()
-  
-}  
+}

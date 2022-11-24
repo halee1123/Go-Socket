@@ -35,14 +35,14 @@ func init() {
 }
 
 //处理client传过来的数据
-func handleConnection(conn net.Conn) {  
-  
+func handleConnection(conn net.Conn) {
+
     buffer := make([]byte, 2048)
     for {
         n, err := conn.Read(buffer)
-        if err != nil {  
+        if err != nil {
             Log(conn.RemoteAddr().String()," 数据已处理,退出: ", err)
-            return  
+            return
         }
 
         // 获取Client 传来的数据参数
@@ -58,26 +58,31 @@ func handleConnection(conn net.Conn) {
             return
         }
         // 打印脚本执行后的内容...
-        fmt.Printf("Client传过来的消息: %s", out)
+        fmt.Printf("Client传来的消息: %s ", out)
 
-        //Log(conn.RemoteAddr().String(), "Client传过来的消息:", string(out))
+        // 向Client 传回的数据
+        conn.Write((out))
+
+
+
     }
+
 }
 
 // Log 日志
-func Log(v ...interface{}) {  
-    log.Println(v...)  
+func Log(v ...interface{}) {
+    log.Println(v...)
 }
 
 // CheckError 连接判断
-func CheckError(err error) {  
+func CheckError(err error) {
     if err != nil {
         _, err := fmt.Fprintf(os.Stderr, "无法连接: %s", err.Error())
         if err != nil {
-            return 
+            return
         }
-        os.Exit(1)  
-    }  
+        os.Exit(1)
+    }
 }
 
 // ReadServeriniFile // 读取ini文件

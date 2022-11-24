@@ -1,4 +1,22 @@
 #!/bin/bash
 
-echo "我是server shell,我已经接收到了client传来的消息:$1"
+# # shell脚本写下你接收的参数,执行程序
+#echo "我是server shell,我已经接收到了client传来的消息:$1"
 
+echo ""
+echo "以下为Server接收到的:[ $1 ]参数所执行的代码;"
+echo ""
+
+if [[ $1 == "readIPaddress" ]]; then
+
+    ifconfig
+
+elif [[ $1 == "getdir" ]]; then
+
+    ls
+
+else
+
+    echo "你输入有误,请重新输入正确的参数..."
+
+fi
