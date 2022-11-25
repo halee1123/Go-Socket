@@ -71,7 +71,9 @@ func sender(conn net.Conn) {
     // 打印Server端返回的数据
     fmt.Printf("Server端返回的数据:%s \n", string(buf[:serverMsg]))
 
-    fmt.Println("执行完毕,client程序退出...")
+    //fmt.Println("执行完毕,client程序退出...")
+
+    // 退出程序
     os.Exit(0)
 
 }
