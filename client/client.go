@@ -87,7 +87,7 @@ func connect() {
 
 	// 判断ip和端口是否为空
 	if ipaddress == "" && port == "" {
-		fmt.Printf("ip地址与端口为空,ini文件未写入,无法开启连接...\n")
+		fmt.Printf("ip地址与端口为空,未检测到ini文件内的端口,无法开启连接...\n")
 	} else {
 		tcpAddr, err := net.ResolveTCPAddr("tcp4", ipAndPort)
 		if err != nil {

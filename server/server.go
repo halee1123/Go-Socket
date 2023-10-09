@@ -40,7 +40,7 @@ func handleConnection(conn net.Conn) {
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
-			Log(conn.RemoteAddr().String(), " Server已将数据处理,Client已退出: ", err)
+			Log(conn.RemoteAddr().String(), " Server接收到的数据已处理,Client已退出: ", err)
 			return
 		}
 
@@ -107,7 +107,7 @@ func serverconn() {
 
 	// 判断ip和端口是否为空
 	if ipaddress == "" && port == "" {
-		fmt.Printf("ip地址与端口为空,ini文件未写入,无法开启...\n")
+		fmt.Printf("ip地址与端口为空,未检测到ini文件内的端口,无法开启...\n")
 	} else {
 		//建立socket，监听端口
 		netListen, err := net.Listen("tcp", ipAndPort)
@@ -119,13 +119,13 @@ func serverconn() {
 			}
 		}(netListen)
 
-		Log(ipAndPort, "等待客户连接...")
+		Log(ipAndPort, "正在等待客户连接:")
 		for {
 			conn, err := netListen.Accept()
 			if err != nil {
 				continue
 			}
-			Log(conn.RemoteAddr().String(), "客户端连接成功...")
+			Log(conn.RemoteAddr().String(), "客户端连接成功:")
 			go handleConnection(conn)
 		}
 	}
