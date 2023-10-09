@@ -40,7 +40,7 @@ func handleConnection(conn net.Conn) {
 	for {
 		n, err := conn.Read(buffer)
 		if err != nil {
-			Log(conn.RemoteAddr().String(), " 数据已处理,退出: ", err)
+			Log(conn.RemoteAddr().String(), " Server已将数据处理,Client已退出: ", err)
 			return
 		}
 
@@ -57,7 +57,7 @@ func handleConnection(conn net.Conn) {
 			return
 		}
 		// 打印脚本执行后的内容...
-		fmt.Printf("Client传来的消息: %s ", out)
+		fmt.Printf("Client端传来的消息: %s ", out)
 
 		// 向Client 传回的数据
 		conn.Write(out)

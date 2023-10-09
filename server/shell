@@ -9,14 +9,39 @@ echo ""
 
 if [[ $1 == "readIPaddress" ]]; then
 
-    ifconfig
+    networkText=`ls /etc/sysconfig/network-scripts/ |awk -F '[ ]+' 'NR==1 {print $1}' | awk -F- '{print $2}'`
+    ipaddress=`ifconfig $networkText | grep -w "inet" | awk '{print $2}'`
+    echo $ipaddress
 
-elif [[ $1 == "getdir" ]]; then
+elif [[ $1 == "getpath" ]]; then
 
-    ls
+    address=`pwd`
+    echo "当前所在路径:$address"
+
+elif [[ $1 == "ToRestart" ]]; then
+
+    reboot
+    echo "服务器已经重启..."
+
+elif [[ $1 == "ViewOnline" ]]; then
+
+    user=`w`
+    echo "目前在线的用户有:"
+    echo "$user"
+
+elif [[ $1 == "readProgress" ]]; then
+
+    Pid=`ps -ef`
+    echo "$Pid"
+
+elif [[ $1 == "readFile" ]]; then
+
+    file=`ls`
+    echo "当前路径下的所有文件:"
+    echo "$file"
 
 else
 
-    echo "你输入有误,请重新输入正确的参数..."
+    echo "你输入有误,你输入的参数不匹配..."
 
 fi
