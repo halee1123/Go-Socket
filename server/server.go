@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gookit/ini/v2"
+	"github.com/gookit/ini/v2" // INI文件处理包
 	"log"
 	"net"
 	"os"
@@ -10,129 +10,133 @@ import (
 	"strings"
 )
 
-// init函数
+// 全局变量定义允许的命令白名单
+var allowedCommands = map[string]bool{
+	"getpath": true, // 示例命令
+	"ls":      true,
+	"ls -all": true,
+	// 在这里添加其他允许执行的命令
+}
+
+// init函数在main之前自动执行，用于程序的初始化
 func init() {
-	// 获取当前路径
+	// 获取当前工作目录路径
 	str, _ := os.Getwd()
-	// 在当前路径下创建cLIent.ini文件
+	// 拼接出配置文件Server.ini的完整路径
 	var filePath = str + "/Server.ini"
 
-	// ini文件路径
+	// 检查配置文件是否存在
 	_, err := os.Stat(filePath)
-
-	if err == nil {
-		return
-		//fmt.Printf(" 当前路径:%s/%s 文件存在\n", str, err)
-	}
+	// 如果不存在，创建一个新的Server.ini文件
 	if os.IsNotExist(err) {
-
 		_, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND, os.ModePerm)
 		if err != nil {
-			return
+			// 如果创建文件失败，则记录错误并退出
+			log.Fatalf("无法创建配置文件: %v", err)
 		}
 	}
 }
 
-//处理client传过来的数据
+// handleConnection处理从客户端接收到的每一个连接请求
 func handleConnection(conn net.Conn) {
-
+	// 创建一个缓冲区用来存放从客户端接收到的数据
 	buffer := make([]byte, 2048)
 	for {
+		// 读取客户端发送的数据
 		n, err := conn.Read(buffer)
 		if err != nil {
-			Log(conn.RemoteAddr().String(), " Server接收到的数据已处理,Client已退出: ", err)
+			Log(conn.RemoteAddr().String(), "服务器接收数据出错, 客户端已退出: ", err)
 			return
 		}
 
-		// 获取Client 传来的数据参数
+		// 处理接收到的数据，删除可能的空格
 		content := strings.TrimSpace(string(buffer[:n]))
-
-		// shell脚本拼接, 脚本以命令形式执行 ..
-		strScripy := "./shell " + content
-
-		// 执行shell脚本命令
-		out, err := exec.Command("/bin/sh", "-c", strScripy).Output()
-		if err != nil {
-			// log.Fatal(err)
-			return
+		// 拆分命令和参数
+		args := strings.Fields(content)
+		// 如果没有命令被发送，跳过本次循环
+		if len(args) == 0 {
+			continue
 		}
-		// 打印脚本执行后的内容...
-		fmt.Printf("Client端传来的消息: %s ", out)
 
-		// 向Client 传回的数据
-		conn.Write(out)
-
+		// 检查命令是否在白名单中
+		if allowed, ok := allowedCommands[args[0]]; ok && allowed {
+			// 如果命令在白名单中，构造shell命令
+			strScript := "./shell " + content
+			// 执行构造的shell命令
+			out, err := exec.Command("/bin/bash", "-c", strScript).Output()
+			if err != nil {
+				Log("执行命令失败: ", err)
+				conn.Write([]byte("执行命令出错\n"))
+				return
+			}
+			// 发送命令执行的输出结果给客户端
+			conn.Write(out)
+		} else {
+			// 如果命令不在白名单中，告知客户端命令执行不被允许
+			msg := fmt.Sprintf("命令 %s 不允许执行\n", args[0])
+			conn.Write([]byte(msg))
+			Log("未授权的命令尝试: ", args[0])
+		}
 	}
-
 }
 
-// Log 日志
+// Log函数用于记录日志信息
 func Log(v ...interface{}) {
 	log.Println(v...)
 }
 
-// CheckError 连接判断
+// CheckError函数用于检查并处理错误
 func CheckError(err error) {
 	if err != nil {
-		_, err := fmt.Fprintf(os.Stderr, "无法连接: %s", err.Error())
-		if err != nil {
-			return
-		}
-		os.Exit(1)
+		log.Fatalf("Fatal error: %s", err.Error())
 	}
 }
 
-// ReadServeriniFile // 读取ini文件
-func ReadServeriniFile(Text string) string {
-	// 获取当前路径
-	//str, _ := os.Getwd()
-	//var filePath = str + "./Server.ini"
-
+// ReadServeriniFile函数用于从Server.ini配置文件中读取指定的配置项
+func ReadServeriniFile(key string) string {
+	// 加载配置文件
 	err := ini.LoadExists("./Server.ini")
 	if err != nil {
-		panic(err)
+		// 如果加载失败，则记录错误并退出
+		log.Fatalf("加载配置文件失败: %v", err)
 	}
-	value := ini.String(Text)
-	//fmt.Println(value)
+	// 读取指定配置项的值
+	value := ini.String(key)
 	return value
 }
 
-// server 开启程序
+// serverconn函数用于启动TCP服务器并等待客户端连接
 func serverconn() {
-
-	// 获取ini文件数据参数
+	// 从配置文件读取IP地址和端口号
 	ipaddress := ReadServeriniFile("socket.ipaddress")
 	port := ReadServeriniFile("socket.port")
 	ipAndPort := ipaddress + ":" + port
 
-	// 判断ip和端口是否为空
-	if ipaddress == "" && port == "" {
-		fmt.Printf("ip地址与端口为空,未检测到ini文件内的端口,无法开启...\n")
-	} else {
-		//建立socket，监听端口
-		netListen, err := net.Listen("tcp", ipAndPort)
-		CheckError(err)
-		defer func(netListen net.Listener) {
-			err := netListen.Close()
-			if err != nil {
-
-			}
-		}(netListen)
-
-		Log(ipAndPort, "正在等待客户连接:")
-		for {
-			conn, err := netListen.Accept()
-			if err != nil {
-				continue
-			}
-			Log(conn.RemoteAddr().String(), "客户端连接成功:")
-			go handleConnection(conn)
-		}
+	// 如果IP地址或端口为空，说明配置文件可能未正确设置，服务器无法启动
+	if ipaddress == "" || port == "" {
+		log.Fatalln("IP地址或端口为空，无法启动服务器。")
 	}
+
+	// 创建TCP监听器，开始监听配置文件中指定的IP地址和端口
+	netListen, err := net.Listen("tcp", ipAndPort)
+	CheckError(err)         // 检查是否有错误发生，如果有，则记录并退出
+	defer netListen.Close() // 在函数返回之前，确保监听器被关闭
+
+	Log("服务器启动，正在等待客户端连接于: ", ipAndPort)
+	// 无限循环，等待客户端的连接
+	for {
+		conn, err := netListen.Accept() // 接受新的客户端连接
+		if err != nil {
+			Log("客户端连接失败: ", err)
+			continue // 如果有错误发生，记录错误然后等待下一个连接
+		}
+		Log(conn.RemoteAddr().String(), " 客户端连接成功")
+		go handleConnection(conn) // 使用goroutine来处理连接，以便同时处理多个连接
+	} // }
+
 }
 
-// 执行程序
+// main函数是程序的入口点
 func main() {
-	// 执行Server程序
-	serverconn()
+	serverconn() // 调用serverconn函数启动服务器
 }
