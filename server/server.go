@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gookit/ini/v2" // INI文件处理包
+	"github.com/gookit/ini/v2"
 	"log"
 	"net"
 	"os"
@@ -45,7 +45,7 @@ func handleConnection(conn net.Conn) {
 		// 读取客户端发送的数据
 		n, err := conn.Read(buffer)
 		if err != nil {
-			Log(conn.RemoteAddr().String(), "服务器接收数据出错, 客户端已退出: ", err)
+			Log(conn.RemoteAddr().String(), "服务器接收数据处理完成, 客户端已退出: ", err)
 			return
 		}
 

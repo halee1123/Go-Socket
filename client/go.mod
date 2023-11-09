@@ -12,4 +12,5 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	golang.org/x/sys v0.0.0-20220829200755-d48e67d00261 // indirect
 	golang.org/x/text v0.3.8 // indirect
+	gopkg.in/ini.v1 v1.67.0 // indirect
 )
