@@ -109,7 +109,7 @@ func sender(conn net.Conn) {
 	}
 
 	// 打印接收到的服务器响应数据。
-	fmt.Printf("服务器返回已处理的数据: %s\n", string(buf[:n]))
+	fmt.Printf("Server服务器返回已处理的数据: %s\n", string(buf[:n]))
 }
 
 // main函数是程序的入口点。
