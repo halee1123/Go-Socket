@@ -94,7 +94,7 @@ Client传过来的消息: 我是server shell 脚本,我已经接收到了client�
 #### go get github.com/gookit/ini/v2 
 
 #
-#### 增加了shell命令的白名单
+#### 添加shell命令的白名单
 在allowedCommands这个方法里添加shell命令,保障了服务器的安全
 
 
