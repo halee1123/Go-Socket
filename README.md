@@ -39,15 +39,21 @@ port = 8000  # 与 Server 端的端口一致
 ## 测试实例
 server.go:
 
-go run server.go
+##执行server: go run server.go
+
 2023/12/28 16:25:23 服务器启动，正在等待客户端连接于:  127.0.0.1:8001
 2023/12/28 16:25:42 127.0.0.1:50085  客户端连接成功
 2023/12/28 16:25:42 127.0.0.1:50085 服务器接收到的数据处理完成，客户端已退出:  EOF
 
 
-client.go:
-go run client.go getpath
-Server 服务器返回已处理的数据: 当前所在路径: xxx/xxx/xxx/server
+client.go
+##执行client:  go run client.go readIPaddress
+
+Server 服务器返回已处理的数据:
+以下为Server接收到的:[ readIPaddress ]参数所执行的代码;
+
+127.0.0.1 192.168.31.119 169.254.218.112
+
 
 ## 注意事项
 如果执行时无法找到依赖，请执行以下命令：
