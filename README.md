@@ -33,7 +33,7 @@ port = 8000  # 与 Server 端的端口一致
 执行 Server 端: go run server
 
 
-执行 Client 端: go run client (这里输入你的放行的shell命令)
+执行 Client 端: go run client (这里输入你所放行的shell命令)
 比如: go run client readIPaddress
 
 
