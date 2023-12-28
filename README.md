@@ -2,7 +2,7 @@
 
 ## 简介
 
-GoSocket 是一个基于 Centos 7、socket 和 shell 的简单通信工具。通过 socket 连接，client 端可以向 server 端发送 shell 命令，并由 server 端将消息传递给 shell 脚本进行处理。
+GoSocket 是一个基于 Linux、socket 和 shell 的简单通信工具。通过 socket 连接，client 端可以向 server 端发送 shell 命令，并由 server 端将消息传递给 shell 脚本进行处理。
 
 ## 配置
 
