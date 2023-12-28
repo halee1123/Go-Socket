@@ -1,96 +1,57 @@
 # GoSocket
 
-### Centos 7 + socket + shell
+## 简介
 
-#
-## 简介:
+GoSocket 是一个基于 Centos 7、socket 和 shell 的简单通信工具。通过 socket 连接，client 端可以向 server 端发送 shell 命令，并由 server 端将消息传递给 shell 脚本进行处理。
 
-#### socket 连接后,client端给server端发送shell命令
+## 配置
 
-#### server接收到client传来的消息会将此消息传给shell脚本调用.
+### Server 端
 
-#### shell 脚本可自定义...
+在 Server 端，您可以创建一个 `Server.ini` 文件，也可以直接执行以下 server 程序，系统将自动创建 ini 文件。
 
-#
+#### Server.ini 文件配置:
 
-#### 配置:
-
-Server端:
-创建一个Server.ini文件,或者执行一下server程序,目录下会自动创建ini文件
-
-#
-
-#### Server.ini文件配置:
+```ini
 [socket]
-
 ipaddress = 127.0.0.1
-
 port = 8000
 
-#
-
-#### Client端:
-创建一个Client.ini文件,或者执行一下Client程序,目录下会自动创建ini文件
 
 
-#### Client.ini文件配置:
+Client 端
+在 Client 端，同样可以创建一个 Client.ini 文件，或者执行 Client 程序，系统将自动创建 ini 文件。
 
+Client.ini 文件配置:
 [socket]
-
-ipaddress = 127.0.0.1  (与Server端ip一致)
-
-port = 8000 (与Server端的端口一致)
-
-#
-
-### 执行 Server端:
-
-#### go run server
-
-#### server执行 client传来的shell命令
+ipaddress = 127.0.0.1  # 与 Server 端 ip 一致
+port = 8000  # 与 Server 端的端口一致
 
 
+## 使用方法:
 
-#
-
-### 执行 Client端: 以命令形式传参执行
-
-#### go run client 这里传你的参数
+执行 Server 端: go run server
 
 
-#
-
-### 测试实例:
-
-#### server.go
-
-go run server.go 
-
-时间:[ 2022-09-02 14:51:01 ]: 2022/09/02 14:51:01 127.0.0.1:8000 等待客户连接...
-
-#
-
-#### client.go
-
-go run client.go hello,我是client
-
-Server连接成功...
-
-向server发送数据成功...
+执行 Client 端: go run client your_command_here
 
 
-#
+## 测试实例
+server.go:
 
-### server端接收到的client消息
+go run server.go
+2023/12/28 16:25:23 服务器启动，正在等待客户端连接于:  127.0.0.1:8001
+2023/12/28 16:25:42 127.0.0.1:50085  客户端连接成功
+2023/12/28 16:25:42 127.0.0.1:50085 服务器接收到的数据处理完成，客户端已退出:  EOF
 
-Client传过来的消息: 我是server shell 脚本,我已经接收到了client传来的消息:hello,我是client
 
-2022/09/02 14:52:27 127.0.0.1:57493  数据已处理,退出:  EOF
+client.go:
+go run client.go getpath
+Server 服务器返回已处理的数据: 当前所在路径: xxx/xxx/xxx/server
 
-#
+## 注意事项
+如果执行时无法找到依赖，请执行以下命令：
+go get github.com/gookit/ini/v2
 
-#### 如果无法执行: 
-
-#### go get github.com/gookit/ini/v2 
 
 
