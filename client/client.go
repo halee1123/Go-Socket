@@ -5,62 +5,51 @@ import (
 	"github.com/gookit/ini/v2" // 引入 gookit/ini 包用于处理 INI 配置文件
 	"net"
 	"os"
+	"time"
+)
+
+const (
+	configFilePath = "./Client.ini"
 )
 
 // init 函数在 main 函数之前自动调用，用于初始化设置。
 func init() {
-	// 获取当前程序运行的目录路径。
-	str, _ := os.Getwd()
-
-	// 构造 Client.ini 文件的完整路径。
-	var filePath = str + "/Client.ini"
-
-	// 检查 Client.ini 文件是否存在。
-	_, err := os.Stat(filePath)
-
-	// 如果文件已存在，则不执行任何操作。
-	if err == nil {
-		return
-	}
-	// 如果文件不存在，则尝试创建该文件。
-	if os.IsNotExist(err) {
-		// 尝试创建配置文件，设置文件权限为 0666。
-		_, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND, os.ModePerm)
-		if err != nil {
-			// 如果创建文件失败，输出错误信息并退出程序。
+	// 检查配置文件是否存在，如果不存在则创建
+	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
+		if _, err := os.OpenFile(configFilePath, os.O_CREATE|os.O_APPEND, os.ModePerm); err != nil {
 			fmt.Printf("无法创建配置文件 'Client.ini': %s\n", err)
 			os.Exit(1)
 		}
 	}
 }
 
-// ReadClieniniFile 函数用于读取 INI 配置文件中的值。
-func ReadClieniniFile(Text string) string {
+// readClientIniFile 函数用于读取 INI 配置文件中的值。
+func readClientIniFile(text string) string {
 	// 加载并检查 Client.ini 文件是否存在。
-	err := ini.LoadExists("./Client.ini")
+	err := ini.LoadExists(configFilePath)
 	if err != nil {
-		// 如果加载失败，抛出 panic 异常。
-		panic(err)
+		fmt.Printf("加载配置文件失败: %v\n", err)
+		os.Exit(1)
 	}
 	// 获取指定配置项的值并返回。
-	value := ini.String(Text)
+	value := ini.String(text)
 	return value
 }
 
 // connect 函数用于与服务器建立连接，并返回连接对象。
 func connect() net.Conn {
 	// 从配置文件中读取服务器的 IP 地址和端口号。
-	ipaddress := ReadClieniniFile("socket.ipaddress")
-	port := ReadClieniniFile("socket.port")
-	ipAndPort := ipaddress + ":" + port
+	ipaddress := readClientIniFile("socket.ipaddress")
+	port := readClientIniFile("socket.port")
+	ipAndPort := fmt.Sprintf("%s:%s", ipaddress, port)
 
 	// 如果 IP 地址或端口为空，则输出错误信息并退出。
-	if ipaddress == "" && port == "" {
+	if ipaddress == "" || port == "" {
 		fmt.Printf("IP 地址与端口为空，未检测到 ini 文件内的端口，无法开启连接...\n")
 		os.Exit(1)
 	}
 	// 解析 TCP 地址。
-	tcpAddr, err := net.ResolveTCPAddr("tcp4", ipAndPort)
+	_, err := net.ResolveTCPAddr("tcp4", ipAndPort)
 	if err != nil {
 		// 如果解析 TCP 地址失败，输出错误信息并退出。
 		fmt.Printf("连接服务器失败，请检查服务地址是否配置正确: %s\n", err)
@@ -68,7 +57,7 @@ func connect() net.Conn {
 	}
 
 	// 创建 TCP 连接。
-	conn, err := net.DialTCP("tcp", nil, tcpAddr)
+	conn, err := net.DialTimeout("tcp", ipAndPort, 5*time.Second)
 	if err != nil {
 		// 如果连接失败，输出错误信息并退出。
 		fmt.Printf("连接服务器失败，请确定服务器是否开启: %s\n", err)
@@ -117,3 +106,5 @@ func main() {
 	conn := connect() // 建立与服务器的连接。
 	sender(conn)      // 发送数据并接收服务器响应。
 }
+
+// 更新代码：重构代码结构，提取配置文件路径为常量；增加连接超时设置。
