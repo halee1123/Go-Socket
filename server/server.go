@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gookit/ini/v2"
+	"github.com/gookit/ini/v2" // 引入 gookit/ini 包用于处理 INI 配置文件
 	"log"
 	"net"
 	"os"
@@ -10,12 +10,15 @@ import (
 	"strings"
 )
 
-// 将允许执行的命令放入map中，更具可扩展性
+const (
+	configFilePath = "./Server.ini" // 配置文件路径常量
+)
+
+// 允许执行的命令列表，提高可扩展性
 var allowedCommands = map[string]bool{
 	"getpath":       true, // 示例命令
 	"readIPaddress": true,
 	"ViewOnline":    true,
-	// 添加其他允许执行的命令
 }
 
 // init 函数在 main 之前自动执行，用于程序的初始化
@@ -23,7 +26,7 @@ func init() {
 	// 获取当前工作目录路径
 	str, _ := os.Getwd()
 	// 构造配置文件 Server.ini 的完整路径
-	filePath := fmt.Sprintf("%s/Server.ini", str)
+	filePath := fmt.Sprintf("%s/%s", str, configFilePath)
 
 	// 检查配置文件是否存在，如果不存在则创建
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
@@ -35,16 +38,18 @@ func init() {
 
 // handleConnection 处理从客户端接收到的每一个连接请求
 func handleConnection(conn net.Conn) {
-	defer conn.Close() // 确保连接在处理完成后关闭
+	defer conn.Close()
 
 	buffer := make([]byte, 2048)
 	for {
+		// 读取客户端发送的数据
 		n, err := conn.Read(buffer)
 		if err != nil {
 			Log(conn.RemoteAddr().String(), "服务器接收到的数据处理完成，客户端已退出: ", err)
 			return
 		}
 
+		// 处理读取到的数据
 		content := strings.TrimSpace(string(buffer[:n]))
 		args := strings.Fields(content)
 		if len(args) == 0 {
@@ -65,6 +70,7 @@ func handleConnection(conn net.Conn) {
 			// 发送命令执行的输出结果给客户端
 			conn.Write(out)
 		} else {
+			// 发送未授权命令的消息给客户端
 			msg := fmt.Sprintf("命令 %s 不允许执行\n", args[0])
 			conn.Write([]byte(msg))
 			Log("未授权的命令尝试: ", args[0])
@@ -84,38 +90,46 @@ func CheckError(err error) {
 	}
 }
 
-// ReadServeriniFile 函数用于从 Server.ini 配置文件中读取指定的配置项
-func ReadServeriniFile(key string) string {
+// ReadIniFile 函数用于从指定的 INI 配置文件中读取指定的配置项
+func ReadIniFile(filePath, key string) (string, error) {
 	// 加载配置文件
-	err := ini.LoadExists("./Server.ini")
+	err := ini.LoadExists(filePath)
 	if err != nil {
-		log.Fatalf("加载配置文件失败: %v", err)
+		return "", fmt.Errorf("加载配置文件失败: %v", err)
 	}
 	// 读取指定配置项的值
 	value := ini.String(key)
-	return value
+	return value, nil
 }
 
 // serverconn 函数用于启动 TCP 服务器并等待客户端连接
 func serverconn() {
-	ipaddress := ReadServeriniFile("socket.ipaddress")
-	port := ReadServeriniFile("socket.port")
+	// 从配置文件中读取服务器的 IP 地址和端口号
+	ipaddress, err := ReadIniFile(configFilePath, "socket.ipaddress")
+	port, err := ReadIniFile(configFilePath, "socket.port")
+	if err != nil {
+		Log("读取配置失败:", err)
+		return
+	}
 	ipAndPort := ipaddress + ":" + port
 
 	if ipaddress == "" || port == "" {
-		log.Fatalln("IP 地址或端口为空，无法启动服务器。")
+		Log("IP 地址或端口为空，无法启动服务器。")
+		return
 	}
 
+	// 监听指定 IP 地址和端口
 	netListen, err := net.Listen("tcp", ipAndPort)
 	CheckError(err)
 	defer netListen.Close()
 
-	Log("服务器启动，正在等待客户端连接于: ", ipAndPort)
+	Log("服务器启动，正在等待客户端连接于:", ipAndPort)
 
 	for {
+		// 接受客户端连接请求
 		conn, err := netListen.Accept()
 		if err != nil {
-			Log("客户端连接失败: ", err)
+			Log("客户端连接失败:", err)
 			continue
 		}
 		Log(conn.RemoteAddr().String(), " 客户端连接成功")
