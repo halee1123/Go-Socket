@@ -21,7 +21,7 @@ func init() {
 	// 加载配置文件并缓存
 	err := ini.LoadExists(configFilePath)
 	if err != nil {
-		log.Fatalf("加载配置文件失败: %v", err)
+		log.Fatalf("加载配置文件失败,请检查配置文件: %v", err)
 	}
 
 	// 从配置文件中读取服务器的 IP 地址和端口号
@@ -31,7 +31,7 @@ func init() {
 
 	// 检查配置是否有效
 	if ipaddress == "" || port == "" {
-		log.Fatalf("配置文件中 IP 地址或端口缺失")
+		log.Fatalf("配置文件中 IP 地址或端口缺失,请检测IP与端口是否正确")
 	}
 
 	// 确保配置文件存在
