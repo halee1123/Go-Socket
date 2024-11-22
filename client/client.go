@@ -13,8 +13,28 @@ const (
 	configFilePath = "./Client.ini"
 )
 
+var ipaddress string
+var port string
+var timeout time.Duration
+
 func init() {
-	// 检查配置文件是否存在，如果不存在则创建
+	// 加载配置文件并缓存
+	err := ini.LoadExists(configFilePath)
+	if err != nil {
+		log.Fatalf("加载配置文件失败: %v", err)
+	}
+
+	// 从配置文件中读取服务器的 IP 地址和端口号
+	ipaddress = ini.String("socket.ipaddress")
+	port = ini.String("socket.port")
+	timeout = time.Duration(ini.Int("socket.timeout", 5)) * time.Second // 默认 5 秒超时
+
+	// 检查配置是否有效
+	if ipaddress == "" || port == "" {
+		log.Fatalf("配置文件中 IP 地址或端口缺失")
+	}
+
+	// 确保配置文件存在
 	if _, err := os.Stat(configFilePath); os.IsNotExist(err) {
 		_, err = os.Create(configFilePath)
 		if err != nil {
@@ -23,34 +43,10 @@ func init() {
 	}
 }
 
-func readClientIniFile(key string) (string, error) {
-	// 加载并检查 Client.ini 文件是否存在。
-	err := ini.LoadExists(configFilePath)
-	if err != nil {
-		return "", fmt.Errorf("加载配置文件失败: %v", err)
-	}
-	// 获取指定配置项的值。
-	value := ini.String(key)
-	if value == "" {
-		return "", fmt.Errorf("配置项 %s 为空", key)
-	}
-	return value, nil
-}
-
 func connect() (net.Conn, error) {
-	// 从配置文件中读取服务器的 IP 地址和端口号。
-	ipaddress, err := readClientIniFile("socket.ipaddress")
-	if err != nil {
-		return nil, err
-	}
-	port, err := readClientIniFile("socket.port")
-	if err != nil {
-		return nil, err
-	}
+	// 连接服务器
 	ipAndPort := fmt.Sprintf("%s:%s", ipaddress, port)
-
-	// 解析 TCP 地址并创建连接。
-	conn, err := net.DialTimeout("tcp", ipAndPort, 5*time.Second)
+	conn, err := net.DialTimeout("tcp", ipAndPort, timeout)
 	if err != nil {
 		return nil, fmt.Errorf("连接服务器失败，请检查服务地址是否配置正确或确认服务器是否开启: %v", err)
 	}
@@ -60,38 +56,39 @@ func connect() (net.Conn, error) {
 func sender(conn net.Conn, message string) error {
 	defer conn.Close() // 函数结束时关闭连接。
 
-	// 发送消息。
+	// 发送消息
 	_, err := conn.Write([]byte(message))
 	if err != nil {
 		return fmt.Errorf("发送数据失败: %v", err)
 	}
 
-	// 创建缓冲区以接收响应数据。
+	// 创建缓冲区以接收响应数据
 	buf := make([]byte, 10240)
-	// 读取响应数据。
+	// 读取响应数据
 	n, err := conn.Read(buf)
 	if err != nil {
 		return fmt.Errorf("接收服务器数据失败: %v", err)
 	}
 
-	// 打印接收到的服务器响应数据。
+	// 打印接收到的服务器响应数据
 	fmt.Printf("服务器返回的数据: %s\n", string(buf[:n]))
 	return nil
 }
 
 func main() {
-	// 检查是否提供了要发送的数据。
+	// 检查是否提供了要发送的数据
 	if len(os.Args) < 2 {
 		log.Fatal("请提供要发送的数据，例如: go run client.go readIPaddress")
 	}
 	message := os.Args[1]
 
-	conn, err := connect() // 建立与服务器的连接。
+	// 建立与服务器的连接
+	conn, err := connect()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	// 发送数据并接收服务器响应。
+	// 发送数据并接收服务器响应
 	if err := sender(conn, message); err != nil {
 		log.Fatal(err)
 	}
