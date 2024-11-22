@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 )
 
 const (
@@ -24,12 +25,32 @@ var allowedCommands = map[string]bool{
 // 全局配置缓存
 var config = make(map[string]string)
 
+// 缓冲池用于复用缓冲区，减少内存分配和释放的开销
+var bufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 2048) // 默认缓冲区大小
+	},
+}
+
+// 最大连接数限制，使用信号量控制并发量
+var maxConnections = make(chan struct{}, 100) // 最大允许 100 个并发连接
+
+// 日志管理相关变量
+var (
+	logFile  *os.File
+	logMutex sync.Mutex // 防止多线程日志写入竞争
+)
+
 // init 函数在 main 之前自动执行，用于程序的初始化
 func init() {
+	// 初始化日志
+	initLog()
+
 	// 获取当前工作目录路径
 	str, err := os.Getwd()
 	if err != nil {
-		log.Fatalf("无法获取当前工作目录: %s\n", err)
+		Log("无法获取当前工作目录: ", err)
+		os.Exit(1)
 	}
 	// 构造配置文件 Server.ini 的完整路径
 	filePath := fmt.Sprintf("%s/%s", str, configFilePath)
@@ -37,13 +58,15 @@ func init() {
 	// 检查配置文件是否存在，如果不存在则创建
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if _, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND, os.ModePerm); err != nil {
-			log.Fatalf("无法创建配置文件 'Server.ini': %s\n", err)
+			Log("无法创建配置文件 'Server.ini': ", err)
+			os.Exit(1)
 		}
 	}
 
 	// 加载配置文件内容
 	if err := ini.LoadExists(filePath); err != nil {
-		log.Fatalf("加载配置文件失败: %v", err)
+		Log("加载配置文件失败: ", err)
+		os.Exit(1)
 	}
 	// 将配置内容存入全局 map
 	config["ipaddress"] = ini.String("socket.ipaddress")
@@ -54,12 +77,15 @@ func init() {
 func handleConnection(conn net.Conn) {
 	defer conn.Close()
 
-	buffer := make([]byte, 2048)
+	// 从缓冲池获取缓冲区
+	buffer := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buffer) // 使用完毕后归还缓冲区
+
 	for {
 		// 读取客户端发送的数据
 		n, err := conn.Read(buffer)
 		if err != nil {
-			Log(conn.RemoteAddr().String(), "服务器接收到的数据处理完成，客户端已退出: ", err)
+			Log(conn.RemoteAddr().String(), " 服务器接收到的数据处理完成，客户端已退出: ", err)
 			return
 		}
 
@@ -91,10 +117,35 @@ func handleConnection(conn net.Conn) {
 	}
 }
 
-// Log 函数用于记录日志信息
+// handleConnectionWithLimit 包装后的连接处理函数，增加最大连接数限制
+func handleConnectionWithLimit(conn net.Conn) {
+	maxConnections <- struct{}{}        // 占用一个连接槽位
+	defer func() { <-maxConnections }() // 释放槽位
+	handleConnection(conn)
+}
+
+// Log 函数用于记录日志信息，线程安全
 func Log(v ...interface{}) {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
+	logMutex.Lock()
+	defer logMutex.Unlock()
 	log.Println(v...)
+}
+
+// initLog 初始化日志文件
+func initLog() {
+	var err error
+	logFile, err = os.OpenFile("server.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatalf("无法打开日志文件: %s", err)
+	}
+	log.SetOutput(logFile) // 将日志输出重定向到文件
+}
+
+// closeLog 关闭日志文件
+func closeLog() {
+	if logFile != nil {
+		logFile.Close()
+	}
 }
 
 // CheckError 函数用于检查并处理错误
@@ -144,11 +195,12 @@ func serverconn() {
 			continue
 		}
 		Log(conn.RemoteAddr().String(), " 客户端连接成功")
-		go handleConnection(conn)
+		go handleConnectionWithLimit(conn) // 使用限制版本的连接处理
 	}
 }
 
 // main 函数是程序的入口点
 func main() {
+	defer closeLog() // 确保程序退出时关闭日志文件
 	serverconn()
 }
