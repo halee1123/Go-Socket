@@ -58,7 +58,7 @@ func init() {
 	// 检查配置文件是否存在，如果不存在则创建
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if _, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND, os.ModePerm); err != nil {
-			Log("无法创建配置文件 'Server.ini': ", err)
+			Log("无法创建配置文件 'Server.ini',请检测是否创建: ", err)
 			os.Exit(1)
 		}
 	}
@@ -110,7 +110,7 @@ func handleConnection(conn net.Conn) {
 			conn.Write(out)
 		} else {
 			// 发送未授权命令的消息给客户端
-			msg := fmt.Sprintf("命令 %s 不允许执行\n", args[0])
+			msg := fmt.Sprintf("此命令 %s 不允许执行\n", args[0])
 			conn.Write([]byte(msg))
 			Log("未授权的命令尝试: ", args[0])
 		}
