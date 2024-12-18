@@ -9,18 +9,12 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"time"
 )
 
 const (
 	configFilePath = "./Server.ini" // 配置文件路径常量
 )
-
-// 允许执行的命令列表，提高可扩展性
-var allowedCommands = map[string]bool{
-	"getpath":       true, // 示例命令
-	"readIPaddress": true,
-	"ViewOnline":    true,
-}
 
 // 全局配置缓存
 var config = make(map[string]string)
@@ -40,6 +34,17 @@ var (
 	logFile  *os.File
 	logMutex sync.Mutex // 防止多线程日志写入竞争
 )
+
+// 令牌桶
+type TokenBucket struct {
+	capacity     int        // 令牌桶容量
+	tokens       int        // 当前令牌数
+	tokensPerSec int        // 每秒生成的令牌数
+	lastRefill   time.Time  // 上次填充令牌的时间
+	mutex        sync.Mutex // 锁，防止并发访问令牌桶
+}
+
+var tokenBucket TokenBucket
 
 // init 函数在 main 之前自动执行，用于程序的初始化
 func init() {
@@ -68,9 +73,15 @@ func init() {
 		Log("加载配置文件失败: ", err)
 		os.Exit(1)
 	}
+
 	// 将配置内容存入全局 map
 	config["ipaddress"] = ini.String("socket.ipaddress")
 	config["port"] = ini.String("socket.port")
+	// 读取令牌桶配置
+	tokenBucket.capacity = ini.Int("socket.token_capacity")
+	tokenBucket.tokensPerSec = ini.Int("socket.tokens_per_sec")
+	tokenBucket.tokens = tokenBucket.capacity
+	tokenBucket.lastRefill = time.Now()
 }
 
 // handleConnection 处理从客户端接收到的每一个连接请求
@@ -82,6 +93,20 @@ func handleConnection(conn net.Conn) {
 	defer bufferPool.Put(buffer) // 使用完毕后归还缓冲区
 
 	for {
+		// 检查令牌桶，是否可以处理请求
+		if !tokenBucket.Take() {
+			Log("令牌桶为空，等待令牌...")
+			// 设置最大等待时间，避免死循环
+			timeout := time.After(5 * time.Second) // 设置最大等待 5 秒
+			select {
+			case <-timeout:
+				Log("等待令牌超时，放弃当前请求")
+				return // 超时后退出处理
+			case <-time.After(1 * time.Second): // 每秒刷新一次令牌
+				continue // 等待令牌
+			}
+		}
+
 		// 读取客户端发送的数据
 		n, err := conn.Read(buffer)
 		if err != nil {
@@ -96,25 +121,51 @@ func handleConnection(conn net.Conn) {
 			continue
 		}
 
-		// 检查命令是否在白名单中
-		if allowed, ok := allowedCommands[args[0]]; ok && allowed {
-			// 构造 shell 命令并执行
-			cmd := exec.Command("./shell", args...)
-			out, err := cmd.Output()
-			if err != nil {
-				Log("执行命令失败: ", err)
-				conn.Write([]byte("执行命令出错\n"))
-				return
-			}
-			// 发送命令执行的输出结果给客户端
-			conn.Write(out)
-		} else {
-			// 发送未授权命令的消息给客户端
-			msg := fmt.Sprintf("此命令 %s 不允许执行\n", args[0])
-			conn.Write([]byte(msg))
-			Log("未授权的命令尝试: ", args[0])
+		// 直接执行命令，不再进行白名单验证
+		Log("接收到命令: ", args[0])
+		cmd := exec.Command("./shell", args...)
+		out, err := cmd.Output()
+		if err != nil {
+			Log("执行命令失败: ", err)
+			conn.Write([]byte("执行命令出错\n"))
+			return
 		}
+		// 发送命令执行的输出结果给客户端
+		conn.Write(out)
+		Log(args[0], "命令处理完成")
 	}
+}
+
+// TokenBucket 令牌桶操作
+func (tb *TokenBucket) Take() bool {
+	tb.mutex.Lock() // 获取锁，防止并发修改令牌桶
+	defer tb.mutex.Unlock()
+
+	// 每秒刷新一次令牌
+	now := time.Now()
+	duration := now.Sub(tb.lastRefill)
+	if duration > time.Second {
+		// 每秒生成的令牌
+		refillTokens := int(duration.Seconds()) * tb.tokensPerSec
+		tb.tokens += refillTokens
+		if tb.tokens > tb.capacity {
+			tb.tokens = tb.capacity
+		}
+		tb.lastRefill = now
+
+		// 打印令牌桶的当前状态
+		Log("令牌桶已刷新，当前令牌数: ", tb.tokens)
+	}
+
+	if tb.tokens > 0 {
+		tb.tokens-- // 取出一个令牌
+		Log("取出一个令牌，当前令牌数: ", tb.tokens)
+		return true
+	}
+
+	// 如果令牌桶为空
+	Log("令牌桶为空，当前令牌数: ", tb.tokens)
+	return false
 }
 
 // handleConnectionWithLimit 包装后的连接处理函数，增加最大连接数限制
@@ -126,9 +177,10 @@ func handleConnectionWithLimit(conn net.Conn) {
 
 // Log 函数用于记录日志信息，线程安全
 func Log(v ...interface{}) {
-	logMutex.Lock()
+	logMutex.Lock() // 获取锁，保证日志的线程安全
 	defer logMutex.Unlock()
-	log.Println(v...)
+	log.Println(v...) // 将日志信息写入文件
+	fmt.Println(v...) // 在终端也输出日志
 }
 
 // initLog 初始化日志文件
@@ -144,14 +196,7 @@ func initLog() {
 // closeLog 关闭日志文件
 func closeLog() {
 	if logFile != nil {
-		logFile.Close()
-	}
-}
-
-// CheckError 函数用于检查并处理错误
-func CheckError(err error) {
-	if err != nil {
-		log.Fatalf("Fatal error: %s", err.Error())
+		logFile.Close() // 确保程序退出时关闭日志文件
 	}
 }
 
@@ -182,10 +227,13 @@ func serverconn() {
 
 	// 监听指定 IP 地址和端口
 	netListen, err := net.Listen("tcp", ipAndPort)
-	CheckError(err)
+	if err != nil {
+		Log("无法监听端口: ", err)
+		return
+	}
 	defer netListen.Close()
 
-	Log("服务器启动，正在等待客户端连接于:", ipAndPort)
+	Log("服务器程序已运行  IP: ", ipaddress, "端口: ", port, "等待连接")
 
 	for {
 		// 接受客户端连接请求
@@ -195,12 +243,15 @@ func serverconn() {
 			continue
 		}
 		Log(conn.RemoteAddr().String(), " 客户端连接成功")
-		go handleConnectionWithLimit(conn) // 使用限制版本的连接处理
+		// 启动一个新的协程来处理客户端连接，确保服务器不被阻塞
+		go handleConnectionWithLimit(conn)
 	}
 }
 
-// main 函数是程序的入口点
+// main 主函数
 func main() {
 	defer closeLog() // 确保程序退出时关闭日志文件
+
+	// 启动服务器监听连接
 	serverconn()
 }

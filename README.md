@@ -14,10 +14,20 @@ GoSocket 是一个基于 Linux、socket 和 shell 的简单通信工具。通过
 
 ```ini
 [socket]
+
+# Server IP地址
 ipaddress = 127.0.0.1
-port = 8000
 
+# Server 端口
+port = 8001
 
+# 自定义令牌数量
+token_capacity = 10
+
+# 每秒生成的令牌数量
+tokens_per_sec = 2
+
+ini文件中,可自定义令牌数量与每秒生成的令牌数量。
 
 Client 端
 在 Client 端，同样可以创建一个 Client.ini 文件，或者执行 Client 程序，系统将自动创建 ini 文件。
