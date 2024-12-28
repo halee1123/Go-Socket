@@ -2,7 +2,7 @@
 
 ## 简介
 
-GoSocket 是一个基于 Linux、socket 和 shell 的简单通信工具。通过 socket 连接，client 端可以向 server 端发送 shell 命令，并由 server 端将消息传递给 shell 脚本进行处理。
+GoSocket 是一款基于 Linux、Socket 和 Shell 的简单通信工具。通过 Socket 连接，客户端可以向服务器发送 Shell 命令，服务器将命令传递给 Shell 脚本进行处理，并将结果返回给客户端。为了限制并发连接，系统采用了令牌桶算法来控制每秒处理的请求数，确保资源不会被过度占用。
 
 ## 配置
 

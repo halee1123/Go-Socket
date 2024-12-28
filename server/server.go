@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"github.com/gookit/ini/v2" // 引入 gookit/ini 包用于处理 INI 配置文件
+	"io"
 	"log"
 	"net"
 	"os"
@@ -19,7 +20,7 @@ const (
 // 全局配置缓存
 var config = make(map[string]string)
 
-// 缓冲池用于复用缓冲区，减少内存分配和释放的开销
+// 缓冲池，用于复用缓冲区，减少内存分配和释放的开销
 var bufferPool = sync.Pool{
 	New: func() interface{} {
 		return make([]byte, 2048) // 默认缓冲区大小
@@ -35,9 +36,9 @@ var (
 	logMutex sync.Mutex // 防止多线程日志写入竞争
 )
 
-// 令牌桶
+// 令牌桶结构
 type TokenBucket struct {
-	capacity     int        // 令牌桶容量
+	capacity     int        // 令牌桶的容量
 	tokens       int        // 当前令牌数
 	tokensPerSec int        // 每秒生成的令牌数
 	lastRefill   time.Time  // 上次填充令牌的时间
@@ -57,13 +58,14 @@ func init() {
 		Log("无法获取当前工作目录: ", err)
 		os.Exit(1)
 	}
+
 	// 构造配置文件 Server.ini 的完整路径
 	filePath := fmt.Sprintf("%s/%s", str, configFilePath)
 
 	// 检查配置文件是否存在，如果不存在则创建
 	if _, err := os.Stat(filePath); os.IsNotExist(err) {
 		if _, err := os.OpenFile(filePath, os.O_CREATE|os.O_APPEND, os.ModePerm); err != nil {
-			Log("无法创建配置文件 'Server.ini',请检测是否创建: ", err)
+			Log("无法创建配置文件 'Server.ini', 请检查权限: ", err)
 			os.Exit(1)
 		}
 	}
@@ -77,102 +79,12 @@ func init() {
 	// 将配置内容存入全局 map
 	config["ipaddress"] = ini.String("socket.ipaddress")
 	config["port"] = ini.String("socket.port")
+
 	// 读取令牌桶配置
-	tokenBucket.capacity = ini.Int("socket.token_capacity")
-	tokenBucket.tokensPerSec = ini.Int("socket.tokens_per_sec")
-	tokenBucket.tokens = tokenBucket.capacity
-	tokenBucket.lastRefill = time.Now()
-}
-
-// handleConnection 处理从客户端接收到的每一个连接请求
-func handleConnection(conn net.Conn) {
-	defer conn.Close()
-
-	// 从缓冲池获取缓冲区
-	buffer := bufferPool.Get().([]byte)
-	defer bufferPool.Put(buffer) // 使用完毕后归还缓冲区
-
-	for {
-		// 检查令牌桶，是否可以处理请求
-		if !tokenBucket.Take() {
-			Log("令牌桶为空，等待令牌...")
-			// 设置最大等待时间，避免死循环
-			timeout := time.After(5 * time.Second) // 设置最大等待 5 秒
-			select {
-			case <-timeout:
-				Log("等待令牌超时，放弃当前请求")
-				return // 超时后退出处理
-			case <-time.After(1 * time.Second): // 每秒刷新一次令牌
-				continue // 等待令牌
-			}
-		}
-
-		// 读取客户端发送的数据
-		n, err := conn.Read(buffer)
-		if err != nil {
-			Log(conn.RemoteAddr().String(), " 服务器接收到的数据处理完成，客户端已退出: ", err)
-			return
-		}
-
-		// 处理读取到的数据
-		content := strings.TrimSpace(string(buffer[:n]))
-		args := strings.Fields(content)
-		if len(args) == 0 {
-			continue
-		}
-
-		// 直接执行命令，不再进行白名单验证
-		Log("接收到命令: ", args[0])
-		cmd := exec.Command("./shell", args...)
-		out, err := cmd.Output()
-		if err != nil {
-			Log("执行命令失败: ", err)
-			conn.Write([]byte("执行命令出错\n"))
-			return
-		}
-		// 发送命令执行的输出结果给客户端
-		conn.Write(out)
-		Log(args[0], "命令处理完成")
-	}
-}
-
-// TokenBucket 令牌桶操作
-func (tb *TokenBucket) Take() bool {
-	tb.mutex.Lock() // 获取锁，防止并发修改令牌桶
-	defer tb.mutex.Unlock()
-
-	// 每秒刷新一次令牌
-	now := time.Now()
-	duration := now.Sub(tb.lastRefill)
-	if duration > time.Second {
-		// 每秒生成的令牌
-		refillTokens := int(duration.Seconds()) * tb.tokensPerSec
-		tb.tokens += refillTokens
-		if tb.tokens > tb.capacity {
-			tb.tokens = tb.capacity
-		}
-		tb.lastRefill = now
-
-		// 打印令牌桶的当前状态
-		Log("令牌桶已刷新，当前令牌数: ", tb.tokens)
-	}
-
-	if tb.tokens > 0 {
-		tb.tokens-- // 取出一个令牌
-		Log("取出一个令牌，当前令牌数: ", tb.tokens)
-		return true
-	}
-
-	// 如果令牌桶为空
-	Log("令牌桶为空，当前令牌数: ", tb.tokens)
-	return false
-}
-
-// handleConnectionWithLimit 包装后的连接处理函数，增加最大连接数限制
-func handleConnectionWithLimit(conn net.Conn) {
-	maxConnections <- struct{}{}        // 占用一个连接槽位
-	defer func() { <-maxConnections }() // 释放槽位
-	handleConnection(conn)
+	tokenBucket.capacity = ini.Int("socket.token_capacity")     // 令牌桶容量
+	tokenBucket.tokensPerSec = ini.Int("socket.tokens_per_sec") // 每秒生成的令牌数
+	tokenBucket.tokens = tokenBucket.capacity                   // 初始化令牌数为最大容量
+	tokenBucket.lastRefill = time.Now()                         // 设置令牌的初始填充时间
 }
 
 // Log 函数用于记录日志信息，线程安全
@@ -209,6 +121,102 @@ func ReadIniFile(key string) (string, error) {
 	return value, nil
 }
 
+// TokenBucket 操作：每秒刷新一次令牌，处理并检查是否可以获取令牌
+func (tb *TokenBucket) Take() bool {
+	tb.mutex.Lock() // 获取锁，防止并发修改令牌桶
+	defer tb.mutex.Unlock()
+
+	// 每秒刷新一次令牌
+	now := time.Now()
+	duration := now.Sub(tb.lastRefill)
+	if duration > time.Second {
+		// 每秒生成的令牌
+		refillTokens := int(duration.Seconds()) * tb.tokensPerSec
+		tb.tokens += refillTokens
+		if tb.tokens > tb.capacity {
+			tb.tokens = tb.capacity // 如果令牌数超过容量，限制为最大容量
+		}
+		tb.lastRefill = now
+
+		// 打印令牌桶的当前状态到终端
+		fmt.Printf("令牌桶已刷新，当前令牌数: %d/%d\n", tb.tokens, tb.capacity)
+		Log("令牌桶已刷新，当前令牌数: ", tb.tokens, " 最大容量: ", tb.capacity)
+	}
+
+	// 如果令牌桶中有令牌，则返回 true
+	if tb.tokens > 0 {
+		tb.tokens-- // 获取一个令牌
+		Log("取出一个令牌，当前令牌数: ", tb.tokens)
+		return true
+	}
+	return false // 如果没有令牌，返回 false
+}
+
+// handleConnection 处理客户端连接
+func handleConnection(conn net.Conn) {
+	defer conn.Close()
+
+	// 从缓冲池获取缓冲区
+	buffer := bufferPool.Get().([]byte)
+	defer bufferPool.Put(buffer) // 使用完毕后归还缓冲区
+
+	for {
+		// 等待令牌并处理客户端请求
+		if !tokenBucket.Take() {
+			Log("令牌桶为空，等待令牌...")
+			timeout := time.After(10 * time.Second) // 最大等待时间 10 秒
+			select {
+			case <-timeout:
+				Log("等待令牌超时，放弃当前请求")
+				return
+			case <-time.After(1 * time.Second): // 每秒检查一次令牌
+				// 等待令牌生成
+				continue
+			}
+		}
+
+		// 读取客户端发送的数据
+		n, err := conn.Read(buffer)
+		if err != nil {
+			if err == io.EOF {
+				// 客户端正常关闭连接
+				Log(conn.RemoteAddr().String(), " 客户端连接关闭\n")
+			} else {
+				// 其他错误
+				Log(conn.RemoteAddr().String(), " 客户端连接失败: \n", err)
+			}
+			return
+		}
+
+		// 处理客户端数据
+		content := strings.TrimSpace(string(buffer[:n]))
+		args := strings.Fields(content)
+		if len(args) == 0 {
+			continue
+		}
+
+		// 执行命令
+		Log("接收到命令: ", args[0])
+		cmd := exec.Command("./shell", args...)
+		out, err := cmd.Output()
+		if err != nil {
+			Log("执行命令失败: ", err)
+			conn.Write([]byte("执行命令出错\n"))
+			return
+		}
+		// 发送命令执行的输出结果给客户端
+		conn.Write(out)
+		Log(args[0], "命令处理完成")
+	}
+}
+
+// handleConnectionWithLimit 包装后的连接处理函数，增加最大连接数限制
+func handleConnectionWithLimit(conn net.Conn) {
+	maxConnections <- struct{}{}        // 占用一个连接槽位
+	defer func() { <-maxConnections }() // 释放槽位
+	handleConnection(conn)
+}
+
 // serverconn 函数用于启动 TCP 服务器并等待客户端连接
 func serverconn() {
 	// 从全局配置中读取服务器的 IP 地址和端口号
@@ -220,6 +228,7 @@ func serverconn() {
 	}
 	ipAndPort := ipaddress + ":" + port
 
+	// 检查配置的 IP 地址和端口
 	if ipaddress == "" || port == "" {
 		Log("IP 地址或端口为空，无法启动服务器。")
 		return

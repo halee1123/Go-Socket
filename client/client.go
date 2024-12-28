@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/gookit/ini/v2" // 引入 gookit/ini 包用于处理 INI 配置文件
+	"github.com/gookit/ini/v2"
 	"log"
 	"net"
 	"os"
@@ -14,10 +14,12 @@ const (
 	logFilePath    = "./client_error.log" // 错误日志文件路径
 )
 
-var ipaddress string
-var port string
-var timeout time.Duration
-var logFile *os.File
+var (
+	ipaddress string
+	port      string
+	timeout   time.Duration
+	logFile   *os.File
+)
 
 // 初始化函数
 func init() {
@@ -64,11 +66,21 @@ func logAndPrintError(msg string) {
 func connect() (net.Conn, error) {
 	// 连接服务器
 	ipAndPort := fmt.Sprintf("%s:%s", ipaddress, port)
-	conn, err := net.DialTimeout("tcp", ipAndPort, timeout)
-	if err != nil {
-		return nil, fmt.Errorf("连接服务器失败，请检查服务地址是否配置正确或确认服务器是否开启: %v", err)
+	var conn net.Conn
+	var err error
+
+	// 重试 3 次，如果连接失败，则退出
+	for i := 0; i < 3; i++ {
+		conn, err = net.DialTimeout("tcp", ipAndPort, timeout)
+		if err == nil {
+			return conn, nil
+		}
+		logAndPrintError(fmt.Sprintf("连接失败，重试 %d/3: %v", i+1, err))
+		time.Sleep(2 * time.Second)
 	}
-	return conn, nil
+
+	// 如果重试 3 次仍然失败，返回错误
+	return nil, fmt.Errorf("连接服务器失败，请检查服务地址是否配置正确或确认服务器是否开启: %v", err)
 }
 
 // sender 发送消息并接收响应
@@ -96,13 +108,21 @@ func sender(conn net.Conn, message string) error {
 	return nil
 }
 
-func main() {
-	// 检查是否提供了要发送的数据
+// 使用flag包处理命令行参数
+func parseArgs() (string, error) {
 	if len(os.Args) < 2 {
-		logAndPrintError("请提供要发送的数据，例如: go run client.go readIPaddress")
+		return "", fmt.Errorf("请提供要发送的数据，例如: go run client.go readIPaddress")
+	}
+	return os.Args[1], nil
+}
+
+func main() {
+	// 解析命令行参数
+	message, err := parseArgs()
+	if err != nil {
+		logAndPrintError(err.Error())
 		return
 	}
-	message := os.Args[1]
 
 	// 建立与服务器的连接
 	conn, err := connect()
